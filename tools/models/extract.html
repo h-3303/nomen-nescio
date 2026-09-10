@@ -1,0 +1,41 @@
+<!doctype html><meta charset="utf-8">
+<!-- Loaded by extract.mjs in headless Chromium. three's USDZLoader needs a DOM, so the parse
+     happens in the page and the resulting GLB is handed back to Node as base64. -->
+<script type="importmap">{"imports":{"three":"/tools/node_modules/three/build/three.module.js","three/addons/":"/tools/node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { USDZLoader } from 'three/addons/loaders/USDZLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+// The scans' textures are never used (the site applies one chalk material), so every image
+// request is answered with a 1x1 PNG to keep the parse fast and offline.
+const manager = new THREE.LoadingManager();
+manager.setURLModifier((url) => /\.(jpe?g|png)$/i.test(url) ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' : url);
+window.convert = (url) => new Promise((resolve, reject) => {
+  new USDZLoader(manager).load(url, (g) => {
+    if (g.up && g.up.z) g.rotation.x = -Math.PI / 2;
+    g.updateWorldMatrix(true, true);
+    const out = new THREE.Group();
+    let tris = 0; const meshes = [];
+    g.traverse((o) => {
+      if (!o.isMesh || !o.geometry) return;
+      let geo = o.geometry.clone();
+      if (geo.index) geo = geo.toNonIndexed();
+      // Keep position, normal and uv only. The uv set is needed for the chalk grain and bump map.
+      const keep = new THREE.BufferGeometry();
+      keep.setAttribute('position', geo.getAttribute('position'));
+      if (geo.getAttribute('normal')) keep.setAttribute('normal', geo.getAttribute('normal')); else keep.computeVertexNormals();
+      if (geo.getAttribute('uv')) keep.setAttribute('uv', geo.getAttribute('uv'));
+      keep.applyMatrix4(o.matrixWorld);
+      tris += keep.getAttribute('position').count / 3;
+      meshes.push(new THREE.Mesh(keep, new THREE.MeshStandardMaterial()));
+    });
+    for (const m of meshes) out.add(m);
+    const box = new THREE.Box3().setFromObject(out); const size = new THREE.Vector3(); box.getSize(size);
+    new GLTFExporter().parse(out, (ab) => {
+      const bytes = new Uint8Array(ab); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      resolve({ b64: btoa(bin), tris, meshes: meshes.length, size: [size.x, size.y, size.z] });
+    }, reject, { binary: true });
+  }, undefined, reject);
+});
+window.ready = true;
+</script>

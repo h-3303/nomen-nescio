@@ -1,0 +1,21 @@
+{
+  "name": "nomen-nescio-tools",
+  "private": true,
+  "type": "module",
+  "description": "Build-time tooling for the site: USDZ to GLB statue conversion and headless screenshot verification. Not part of the deployed bundle.",
+  "scripts": {
+    "models:extract": "node models/extract.mjs",
+    "models:optimize": "node models/optimize.mjs",
+    "verify": "node verify/screenshots.mjs",
+    "verify:motion": "node verify/motion.mjs"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "^4.5.0",
+    "@gltf-transform/extensions": "^4.5.0",
+    "@gltf-transform/functions": "^4.5.0",
+    "gl-matrix": "^3.4.3",
+    "meshoptimizer": "^0.22.0",
+    "playwright": "^1.63.0",
+    "three": "^0.186.0"
+  }
+}
