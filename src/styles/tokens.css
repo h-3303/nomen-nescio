@@ -1,0 +1,61 @@
+/*
+ * Death to the World — design tokens.
+ * Codified from the "Death to the World - Design Language" canvas
+ * (issues 1, 2, 3, 5, 11 of the zine): six voices + one hollow, one red,
+ * sixteen devices, two grounds.
+ */
+:root {
+  /* SURFACES — two inks only: toner black and the paper it failed to cover */
+  --dtw-paper: #e8e5dc;        /* PAPER */
+  --dtw-paper-2nd: #d9d4c6;    /* 2ND GEN photocopy */
+  --dtw-toner: #141412;        /* TONER */
+  --dtw-ink: #1a1a18;          /* line ink / borders */
+
+  /* halftone greys — photocopied midtones, never used as tints for type */
+  --dtw-grey-1: #c9c4b6;
+  --dtw-grey-2: #bfb9aa;
+  --dtw-grey-3: #b8b2a3;
+  --dtw-grey-4: #a8a294;
+  --dtw-grey-5: #8f8a7c;
+
+  /* THE RED RULE — one gesture per artifact, never a background */
+  --dtw-cardinal: #b3202c;     /* CARDINAL — red on paper */
+  --dtw-dried-blood: #8e1a1f;  /* DRIED BLOOD — red on black */
+
+  /* muted label ink (specimen labels, colophons on paper) */
+  --dtw-label: #4a463c;
+  --dtw-label-faint: #6a6558;
+
+  /* VOICES */
+  --dtw-font-blackletter: 'Pirata One', serif;        /* I — covers, mastheads */
+  --dtw-font-serif: 'Old Standard TT', serif;         /* II caps, III body */
+  --dtw-font-typewriter: 'Special Elite', monospace;  /* IV — manifestos, addresses */
+  --dtw-font-hand: 'La Belle Aurore', cursive;        /* V — always black, on paper */
+  --dtw-font-fell: 'IM Fell English SC', serif;       /* VI — folios, furniture */
+
+  /* hard paste-up shadows — no soft blur anywhere */
+  --dtw-shadow-paste: 3px 3px 0 rgba(20, 20, 18, 0.18);
+  --dtw-shadow-slip: 2px 3px 0 rgba(0, 0, 0, 0.35);
+  --dtw-shadow-slip-dark: 2px 2px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* TEXTURES — every image is a photocopy of a photocopy */
+.dtw-xerox {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.22'/%3E%3C/svg%3E");
+}
+.dtw-tone {
+  background-image: radial-gradient(circle at 1px 1px, #111 1.1px, transparent 1.3px);
+  background-size: 5px 5px;
+}
+.dtw-tone-fine {
+  background-image: radial-gradient(circle at 1px 1px, #111 0.8px, transparent 1px);
+  background-size: 3px 3px;
+}
+.dtw-hatch {
+  background-image: repeating-linear-gradient(45deg, #1a1a18 0 2px, transparent 2px 7px);
+}
+.dtw-hatch.dtw-tone {
+  background-image: repeating-linear-gradient(45deg, #1a1a18 0 2px, transparent 2px 7px),
+    radial-gradient(circle at 1px 1px, #111 1.1px, transparent 1.3px);
+  background-size: auto, 5px 5px;
+}
