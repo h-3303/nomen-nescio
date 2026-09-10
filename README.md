@@ -13,9 +13,11 @@ Built from the Claude Design handoff (`Experiment.dc.html`) and deployed on Verc
   (identical class names, props and defaults); `src/styles/` carries the tokens, component
   CSS and the 22 vendored OFL webfonts verbatim.
 - **Statues** — `src/statues/` renders four photogrammetry scans with three.js: a shared
-  procedural chalk material, a hard key light with self-shadow, paper-coloured fog, drifting
-  smoke planes, and a scroll-anchored parallax per figure. Elements marked `data-plx` drift
-  at their own rate. The three.js chunk is lazy-loaded after the sheet has painted.
+  procedural chalk material, a hard key light with self-shadow, paper-coloured fog, and a
+  scroll-anchored parallax per figure. Three photocopy strata drift at their own rates:
+  halftone dot-grid plates and 45° hatch scraps pasted in front of the figures, toner flecks
+  in front of the sheet. Elements marked `data-plx` drift too. The scene only redraws on
+  scroll and resize. The three.js chunk is lazy-loaded after the sheet has painted.
 - **Models** — the source USDZ scans (15 MB each) were converted at build time to
   geometry-only GLB: welded, decimated to ~90k triangles, centred and normalised to unit
   height, quantized and meshopt-compressed. Roughly 1 MB each, in `public/models/`.

@@ -23,10 +23,10 @@ const NOTES = [
   'Nothing is removed once pasted. The sheet only gets longer.',
 ];
 
-type Props = { showStatues?: boolean; workLayout?: 'index' | 'cards'; showNotes?: boolean };
+type Props = { showStatues?: boolean; shadowDepth?: number; workLayout?: 'index' | 'cards'; showNotes?: boolean };
 type Focus = { w: Work; phase: 'open' | 'closing' } | null;
 
-export default function App({ showStatues = true, workLayout = 'index', showNotes = true }: Props) {
+export default function App({ showStatues = true, shadowDepth = 0, workLayout = 'index', showNotes = true }: Props) {
   const [focus, setFocus] = useState<Focus>(null);
   const focusWork = focus?.w;
   const listAnim = focus ? (focus.phase === 'open' ? 'dtwListOff .5s steps(4,end) forwards' : 'dtwListBack .45s steps(4,end) forwards') : 'none';
@@ -39,7 +39,7 @@ export default function App({ showStatues = true, workLayout = 'index', showNote
     <div className="page">
       {showStatues && (
         <Suspense fallback={null}>
-          <StatueField />
+          <StatueField shadowDepth={shadowDepth} />
         </Suspense>
       )}
       <Sheet ground="paper" width="100%" padding={0} style={{ position: 'relative', zIndex: 1, background: 'transparent' }}>

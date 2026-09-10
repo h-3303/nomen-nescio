@@ -1,8 +1,8 @@
 /*
- * The statue field: four photogrammetry scans of marble figures (CC0 scans, decimated and
- * meshopt-compressed) rendered as chalk-white toner ghosts behind the sheet. Scroll drives a
- * per-figure parallax; dust clouds drift inside the same scene; page elements marked
- * data-plx drift at their own rates.
+ * The statue field: four photogrammetry scans of marble figures (decimated and meshopt-compressed)
+ * rendered as chalk-white toner ghosts behind the sheet. Scroll drives a per-figure parallax;
+ * three photocopy strata (halftone dot plates, hatch scraps, toner flecks) drift at their own
+ * rates around them; page elements marked data-plx drift too.
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -30,36 +30,6 @@ const FIGURES: Figure[] = [
 
 const lcg = (seed: number) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 
-// Procedural smoke sprite: clustered soft blobs with a radial falloff — no square edges anywhere.
-function makeSmokeTexture() {
-  const N = 512, c = document.createElement('canvas');
-  c.width = c.height = N;
-  const g = c.getContext('2d')!;
-  const rnd = lcg(13);
-  for (let i = 0; i < 110; i++) {
-    const ang = rnd() * Math.PI * 2;
-    const rad = Math.pow(rnd(), 0.6) * N * 0.33;
-    const x = N / 2 + Math.cos(ang) * rad, y = N / 2 + Math.sin(ang) * rad;
-    const r = 18 + rnd() * 95;
-    const a = 0.025 + rnd() * 0.075;
-    const gr = g.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, 'rgba(255,255,255,' + a.toFixed(3) + ')');
-    gr.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = gr;
-    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-  }
-  const mask = g.createRadialGradient(N / 2, N / 2, N * 0.12, N / 2, N / 2, N * 0.5);
-  mask.addColorStop(0, 'rgba(0,0,0,0)');
-  mask.addColorStop(1, 'rgba(0,0,0,1)');
-  g.globalCompositeOperation = 'destination-out';
-  g.fillStyle = mask;
-  g.fillRect(0, 0, N, N);
-  g.globalCompositeOperation = 'source-over';
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
 // Procedural chalk: near-white, fully matte, a fine even grain and nothing else.
 function makeChalk() {
   const N = 1024, c = document.createElement('canvas'); c.width = c.height = N;
@@ -73,12 +43,14 @@ function makeChalk() {
   map.colorSpace = THREE.SRGBColorSpace; map.wrapS = map.wrapT = THREE.RepeatWrapping; map.repeat.set(4, 4);
   // A subtle bump from the same grain gives the surface a powdery bite under the key light.
   const bump = new THREE.CanvasTexture(c); bump.wrapS = bump.wrapT = THREE.RepeatWrapping; bump.repeat.set(6, 6);
-  return new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 0.004, roughness: 1, metalness: 0, color: 0xffffff, envMapIntensity: 0.2 });
+  return new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 0.006, roughness: 1, metalness: 0, color: 0xffffff, envMapIntensity: 0.12 });
 }
 
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, front: HTMLElement): () => void {
+export type Strata = { deep: HTMLElement; mid: HTMLElement; front: HTMLElement };
+
+export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, strata: Strata, shadowDepth = 0): () => void {
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
   renderer.setClearAlpha(0);
   renderer.shadowMap.enabled = true;
@@ -93,7 +65,7 @@ export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, 
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.3;
   // Hard key from upper left so the carving throws real self-shadow; warm fill from below-right.
-  const key = new THREE.DirectionalLight(0xfff6ea, 2.6);
+  const key = new THREE.DirectionalLight(0xfff6ea, 3.2);
   key.position.set(-6, 9, 6);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
@@ -103,8 +75,9 @@ export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, 
   key.shadow.camera.left = key.shadow.camera.bottom = -14;
   key.shadow.camera.right = key.shadow.camera.top = 14;
   scene.add(key);
-  const fill = new THREE.DirectionalLight(0xe4e6ea, 1.1);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b3a6, 0.9));
+  const fill = new THREE.DirectionalLight(0xe4e6ea, 0.7);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0xb9b3a6, 0.6);
+  scene.add(hemi);
   fill.position.set(5, -2, 4);
   scene.add(fill);
   const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
@@ -115,28 +88,22 @@ export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, 
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
 
-  // Dust clouds: toner-grey smoke planes drifting in the statue scene — some in front, some behind.
-  // Settings dialed in on the Dust Experiments sheet: count 7, opacity .3, speed 1.4, scale 1.2.
-  const smoke = makeSmokeTexture();
-  const clouds: THREE.Mesh[] = [];
-  const crnd = lcg(41);
-  const tanF = Math.tan((camera.fov * Math.PI) / 360);
-  const addCloud = (z: number, opacity: number) => {
-    const dist = Math.abs(z);
-    const span = tanF * dist * 2;
-    const size = span * (0.9 + crnd() * 0.8) * 1.2;
-    const geo = new THREE.PlaneGeometry(size, size);
-    const mat = new THREE.MeshBasicMaterial({ map: smoke, transparent: true, fog: true, opacity: opacity * (0.7 + crnd() * 0.6), color: 0x4a4740, depthWrite: false });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set((crnd() * 2 - 1) * span * 1.1, (crnd() * 2 - 1) * span * 0.55, z);
-    mesh.rotation.z = crnd() * Math.PI * 2;
-    mesh.userData.speed = (0.0004 + crnd() * 0.0011) * 1.4;
-    mesh.userData.dir = crnd() < 0.5 ? -1 : 1;
-    scene.add(mesh);
-    clouds.push(mesh);
+  // One dial, four levers: key/ambient ratio, shadow-edge hardness, canvas contrast curve, fog reach.
+  const applyDepth = (v: number) => {
+    const t = Math.min(1, Math.max(0, isNaN(v) ? 0 : v));
+    key.intensity = 3.2 + 2.6 * t;
+    fill.intensity = 0.7 - 0.4 * t;
+    hemi.intensity = 0.6 - 0.35 * t;
+    scene.environmentIntensity = 0.3 - 0.22 * t;
+    const ext = 14 - 5 * t; // tighter shadow camera = denser texels = harder edges
+    const cam = key.shadow.camera;
+    cam.left = cam.bottom = -ext; cam.right = cam.top = ext;
+    cam.updateProjectionMatrix();
+    (scene.fog as THREE.Fog).near = 15 + 12 * t;
+    (scene.fog as THREE.Fog).far = 42 + 14 * t;
+    canvas.style.filter = 'saturate(.5) contrast(' + (1.06 + 0.5 * t).toFixed(3) + ') brightness(' + (1 + 0.06 * t).toFixed(3) + ')';
   };
-  for (let i = 0; i < 7; i++) addCloud(-4.5 - crnd() * 2.5, 0.3);   // in front of the statues
-  for (let i = 0; i < 4; i++) addCloud(-17 - crnd() * 5, 0.18);    // behind them, fading into the fog
+  applyDepth(shadowDepth);
 
   let disposed = false;
   const figures = FIGURES.map((f) => {
@@ -188,8 +155,12 @@ export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, 
       obj.rotation.y = def.ry + (still ? 0 : delta * 0.06);
     }
     renderer.render(scene, camera);
-    // Texture strata: sparse flecks outrun the page; the dust clouds live inside the 3D scene.
-    if (!still) front.style.backgroundPosition = '0 ' + (-scroll * 1.28).toFixed(1) + 'px';
+    // Texture strata: dot plates crawl, hatch scraps keep pace with the statues, flecks outrun the page.
+    if (!still) {
+      strata.deep.style.backgroundPosition = '0 ' + (-scroll * 0.12).toFixed(1) + 'px';
+      strata.mid.style.backgroundPosition = '0 ' + (-scroll * 0.55).toFixed(1) + 'px';
+      strata.front.style.backgroundPosition = '0 ' + (-scroll * 1.28).toFixed(1) + 'px';
+    }
     // Foreground parallax: any element with data-plx="rate" drifts relative to its resting position.
     const vh = viewH || innerHeight;
     document.querySelectorAll<HTMLElement>('[data-plx]').forEach((el) => {
@@ -225,20 +196,8 @@ export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, 
   window.addEventListener('scroll', queue, { passive: true, capture: true });
   resize();
 
-  // Continuous slow turn for the dust; scroll still triggers full draws for parallax.
-  let raf = 0;
-  if (!reduced()) {
-    const turn = () => {
-      raf = requestAnimationFrame(turn);
-      for (const p of clouds) p.rotation.z += p.userData.speed * p.userData.dir;
-      renderer.render(scene, camera);
-    };
-    turn();
-  }
-
   return () => {
     disposed = true;
-    cancelAnimationFrame(raf);
     cancelAnimationFrame(q);
     window.removeEventListener('resize', resize);
     window.removeEventListener('scroll', queue, { capture: true });
