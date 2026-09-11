@@ -26,7 +26,11 @@ local build is the gate.
   offsets (expect dots -132 px, hatch -605 px, flecks -1408 px) and captures two frames. Slow
   under software GL; allow a few minutes.
 
-Both scripts print page errors and console output; a clean run reports `logs: none`.
+- `node verify/check-fx.mjs`: lists the scroll-driven animations and their timelines, prints
+  the measured drift of every `data-plx` section against the formula at two scroll positions,
+  the strata offsets and layer heights, and confirms there is no horizontal overflow.
+
+All scripts print page errors and console output; a clean run reports `logs: none`.
 
 ## Vercel
 

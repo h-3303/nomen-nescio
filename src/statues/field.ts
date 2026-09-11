@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { STRATA_RATES, supportsScrollTimeline, supportsViewTimeline } from './scrollfx';
 
 type Figure = { kind: string; x: number; z: number; height: number; ry: number; rz: number; anchor: number; speed: number };
 
@@ -51,7 +52,7 @@ const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 export type Strata = { deep: HTMLElement; mid: HTMLElement; front: HTMLElement };
 
 export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, strata: Strata, shadowDepth = 0): () => void {
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
   renderer.setClearAlpha(0);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoft was removed in three r186; PCF is what it resolved to
@@ -124,7 +125,7 @@ export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, 
       });
       statue.scale.setScalar(f.height);
       pivot.add(statue);
-      queue();
+      draw(shown);
     }, undefined, (e) => console.warn('statue', f.kind, e));
     return { def: f, obj: pivot };
   });
@@ -138,9 +139,18 @@ export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, 
     return Math.max(1, (se ? se.scrollHeight : 0) - window.innerHeight);
   };
 
+  // The figures follow a damped copy of the scroll position. The compositor scrolls the page
+  // before this code sees the new offset, so a frame that arrives late or is dropped would
+  // otherwise show as a jump; easing toward the target (time constant 80 ms) turns uneven frame
+  // timing into continuous motion while staying a hair behind the sheet.
+  const TAU = 80;
+  let target = scrollTop();
+  let shown = target;
+  let animating = false;
+  let lastT = 0;
+
   const plx = new WeakMap<HTMLElement, number>();
-  function draw() {
-    const scroll = scrollTop();
+  function draw(scroll: number) {
     const range = scrollRange();
     const still = reduced();
     const tan = Math.tan((camera.fov * Math.PI) / 360);
@@ -155,41 +165,67 @@ export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, 
       obj.rotation.y = def.ry + (still ? 0 : delta * 0.06);
     }
     renderer.render(scene, camera);
-    // Texture strata: dot plates crawl, hatch scraps keep pace with the statues, flecks outrun the page.
-    if (!still) {
-      strata.deep.style.backgroundPosition = '0 ' + (-scroll * 0.12).toFixed(1) + 'px';
-      strata.mid.style.backgroundPosition = '0 ' + (-scroll * 0.55).toFixed(1) + 'px';
-      strata.front.style.backgroundPosition = '0 ' + (-scroll * 1.28).toFixed(1) + 'px';
-    }
-    // Foreground parallax: any element with data-plx="rate" drifts relative to its resting position.
-    const vh = viewH || innerHeight;
-    document.querySelectorAll<HTMLElement>('[data-plx]').forEach((el) => {
-      if (still) { el.style.transform = ''; return; }
-      const rate = parseFloat(el.dataset.plx || '') || 0;
-      const r = el.getBoundingClientRect();
-      const cur = plx.get(el) || 0;
-      const center = r.top + r.height / 2 - cur;
-      const y = (center - vh / 2) * -rate;
-      plx.set(el, y);
-      el.style.transform = 'translate3d(0,' + y.toFixed(1) + 'px,0)';
-      el.style.willChange = 'transform';
-    });
   }
 
+  // Fallbacks for browsers without scroll-driven animations: the strata and the data-plx
+  // sections are moved here with `translate` (compositor-only, no repaint, and it composes with
+  // the design's rotate() transforms). Reads are batched before writes to avoid layout thrash.
+  function drawFallbacks(scroll: number) {
+    const still = reduced();
+    if (!supportsScrollTimeline) {
+      if (!still) {
+        strata.deep.style.translate = '0 ' + (-scroll * STRATA_RATES.dots).toFixed(1) + 'px';
+        strata.mid.style.translate = '0 ' + (-scroll * STRATA_RATES.hatch).toFixed(1) + 'px';
+        strata.front.style.translate = '0 ' + (-scroll * STRATA_RATES.flecks).toFixed(1) + 'px';
+      }
+    }
+    if (!supportsViewTimeline) {
+      const vh = viewH || innerHeight;
+      const els = [...document.querySelectorAll<HTMLElement>('[data-plx]')];
+      const rects = els.map((el) => el.getBoundingClientRect());
+      els.forEach((el, i) => {
+        if (still) { el.style.translate = ''; return; }
+        const rate = parseFloat(el.dataset.plx || '') || 0;
+        const r = rects[i];
+        const cur = plx.get(el) || 0;
+        const center = r.top + r.height / 2 - cur;
+        const y = (center - vh / 2) * -rate;
+        plx.set(el, y);
+        el.style.translate = '0 ' + y.toFixed(1) + 'px';
+      });
+    }
+  }
+
+  const tick = (now: number) => {
+    const dt = lastT ? Math.min(100, now - lastT) : 16;
+    lastT = now;
+    shown += (target - shown) * (1 - Math.exp(-dt / TAU));
+    if (Math.abs(target - shown) < 0.25) { shown = target; animating = false; lastT = 0; }
+    draw(shown);
+    if (animating) q = requestAnimationFrame(tick);
+  };
   let q = 0;
   const queue = () => {
-    if (q) return;
-    q = requestAnimationFrame(() => { q = 0; draw(); });
+    target = scrollTop();
+    if (reduced()) shown = target;
+    drawFallbacks(target);
+    if (animating) return;
+    animating = true;
+    q = requestAnimationFrame(tick);
   };
   const resize = () => {
     const w = host.clientWidth || window.innerWidth;
     const h = host.clientHeight || window.innerHeight;
-    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    // 1.5x is plenty for chalk figures that are multiply-blended and softened by the filter;
+    // 2x doubled the fill cost on retina screens for no visible gain.
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     viewH = h;
-    draw();
+    target = shown = scrollTop();
+    drawFallbacks(target);
+    draw(shown);
   };
 
   window.addEventListener('resize', resize);
@@ -199,9 +235,10 @@ export function createStatueField(host: HTMLElement, canvas: HTMLCanvasElement, 
   return () => {
     disposed = true;
     cancelAnimationFrame(q);
+    animating = false;
     window.removeEventListener('resize', resize);
     window.removeEventListener('scroll', queue, { capture: true });
-    document.querySelectorAll<HTMLElement>('[data-plx]').forEach((el) => { el.style.transform = ''; });
+    document.querySelectorAll<HTMLElement>('[data-plx]').forEach((el) => { el.style.translate = ''; });
     pmrem.dispose();
     renderer.dispose();
   };

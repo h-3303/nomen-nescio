@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-10 (later)
+
+### Scroll smoothness
+- Sections (`data-plx`) and the three strata are now moved by the compositor with CSS
+  scroll-driven animations on `translate` (`src/statues/scrollfx.ts`); the JS path remains as
+  a fallback and no longer reads layout per element or repaints the strata.
+- The WebGL figures follow a damped scroll position (80 ms time constant) so uneven frame timing
+  reads as motion rather than jumps.
+- Renderer pixel ratio capped at 1.5, `powerPreference: high-performance`.
+- The sheet clips with `overflow: clip` and the page clips at `html`, so no ancestor is a
+  scroll container. The studio plate and colophon keep their design rotations (the old
+  `transform` write had been overriding them).
+
 ## 2026-09-10
 
 ### Documentation and tooling

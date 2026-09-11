@@ -29,8 +29,8 @@ Vite 8, React 19, TypeScript, static output. The design system is a 1:1 TypeScri
 verbatim. The statue field in `src/statues/` renders four photogrammetry scans with three.js:
 one shared chalk material, a hard key light with self-shadow, paper-coloured fog, a
 scroll-anchored parallax per figure, and three photocopy strata (dot plates, hatch scraps,
-toner flecks) drifting at their own rates. The three.js chunk lazy-loads after the sheet paints
-and the scene only redraws on scroll. The 15 MB USDZ scans were reduced at build time to ~1 MB
+toner flecks) drifting at their own rates on the compositor. The three.js chunk lazy-loads after
+the sheet paints and the scene only redraws on scroll. The 15 MB USDZ scans were reduced at build time to ~1 MB
 meshopt-compressed GLBs.
 
 ## Documentation

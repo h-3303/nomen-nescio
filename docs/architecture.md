@@ -28,7 +28,8 @@ src/
   dtw/index.tsx            design-system components (see docs/design-system.md)
   statues/
     StatueField.tsx        React wrapper: canvas + the three texture strata
-    field.ts               the three.js scene, parallax and strata drift (see docs/statue-field.md)
+    field.ts               the three.js scene and damped figure parallax (see docs/statue-field.md)
+    scrollfx.ts            compositor scroll-driven animations for sections and strata
   styles/
     fonts.css              @font-face rules (paths rewritten to /fonts/)
     tokens.css             colour, voice, shadow and texture tokens (verbatim)
@@ -49,6 +50,9 @@ vercel.json                immutable cache headers for /models and /fonts
 - `.dtw-sheet.dtw-sheet--paper { background: transparent !important }` so the Sheet does not
   paint its own paper (and its xerox grain) over the statues. The page wrapper paints the
   paper and a finer fractal-noise grain instead.
+- `.page > .dtw-sheet { overflow: clip }` in place of the system's `overflow: hidden`, and
+  `html { overflow-x: hidden }` rather than clipping on `.page`: neither creates a scroll
+  container, so the scroll-driven animations measure against the document.
 - `.dtw-masthead*` gets `white-space: nowrap` so the blackletter name never wraps on desktop;
   the phone media query lifts it again and drops the title to 32 px.
 
@@ -76,8 +80,9 @@ where they carry shadow; the dot plates drawn after the canvas therefore read ov
    `StatueField-*.js` chunk (three.js, ~164 KB gzipped) after the first paint.
 4. `StatueField` mounts, calls `createStatueField`, which builds the scene and starts loading
    the four GLBs in parallel (~4 MB total, cached immutably).
-5. The scene redraws on `scroll` and `resize` only. Each draw positions the figures, renders,
-   shifts the three strata and translates every `data-plx` element.
+5. Sections and strata are moved by the compositor (CSS scroll-driven animations installed by
+   `scrollfx.ts`). The WebGL scene redraws on `scroll` (through a short damped
+   `requestAnimationFrame` chain) and on `resize`.
 6. Unmount returns a disposer that removes listeners, clears the `data-plx` transforms and
    disposes the renderer.
 

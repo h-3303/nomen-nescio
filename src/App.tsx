@@ -1,9 +1,11 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useLayoutEffect, useRef, useState } from 'react';
 import {
   BarHeading, BodyText, Folio, Handwritten, Headline, HollowTitle, Masthead, Ornament, PastedBox,
   PastedSlip, PhotoInLetter, Plate, QuoteBlock, RedStamp, ReversedPanel, Sheet, SpineBanner,
   TornScrap, Typewriter, XBulletList,
 } from './dtw';
+
+import { installParallax } from './statues/scrollfx';
 
 // The statue field pulls in three.js; it loads after the sheet has painted.
 const StatueField = lazy(() => import('./statues/StatueField'));
@@ -28,6 +30,9 @@ type Focus = { w: Work; phase: 'open' | 'closing' } | null;
 
 export default function App({ showStatues = true, shadowDepth = 0, workLayout = 'index', showNotes = true }: Props) {
   const [focus, setFocus] = useState<Focus>(null);
+  const page = useRef<HTMLDivElement>(null);
+  // Before first paint, so the sections start at their parallax positions rather than jumping.
+  useLayoutEffect(() => { installParallax(page.current!); }, []);
   const focusWork = focus?.w;
   const listAnim = focus ? (focus.phase === 'open' ? 'dtwListOff .5s steps(4,end) forwards' : 'dtwListBack .45s steps(4,end) forwards') : 'none';
   const listBg = focus ? '#e8e5dc' : 'transparent';
@@ -36,7 +41,7 @@ export default function App({ showStatues = true, shadowDepth = 0, workLayout = 
   const focusEnd = () => setFocus((f) => (f && f.phase === 'closing' ? null : f));
 
   return (
-    <div className="page">
+    <div className="page" ref={page}>
       {showStatues && (
         <Suspense fallback={null}>
           <StatueField shadowDepth={shadowDepth} />

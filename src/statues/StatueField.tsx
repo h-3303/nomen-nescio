@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createStatueField } from './field';
+import { watchScrollRange } from './scrollfx';
 
 const svg = (markup: string) => 'url("data:image/svg+xml,' + encodeURIComponent(markup) + '")';
 
@@ -24,12 +25,15 @@ export default function StatueField({ shadowDepth = 0 }: { shadowDepth?: number 
   const mid = useRef<HTMLDivElement>(null);
   const front = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    const stopRange = watchScrollRange();
+    let stopField: (() => void) | undefined;
     try {
-      return createStatueField(host.current!, canvas.current!, { deep: deep.current!, mid: mid.current!, front: front.current! }, shadowDepth);
+      stopField = createStatueField(host.current!, canvas.current!, { deep: deep.current!, mid: mid.current!, front: front.current! }, shadowDepth);
     } catch (e) {
       // No WebGL: the sheet stands on its own.
       console.warn('statue field unavailable', e);
     }
+    return () => { stopField?.(); stopRange(); };
   }, [shadowDepth]);
   return (
     <>

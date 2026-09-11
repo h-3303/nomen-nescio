@@ -6,7 +6,9 @@ thin React wrapper that owns the DOM (canvas and strata divs) and the lifecycle.
 ## Scene
 
 - **Renderer**: `WebGLRenderer` with `alpha: true`, clear alpha 0, `antialias: true`,
-  PCF shadow maps, ACES filmic tone mapping at exposure 1. Pixel ratio capped at 2.
+  PCF shadow maps, ACES filmic tone mapping at exposure 1, `powerPreference: high-performance`.
+  Pixel ratio capped at 1.5: the figures are multiply-blended and filtered, so 2x only doubled
+  the fill cost.
 - **Camera**: perspective, 34 degree vertical FOV, aspect from the host element, near 0.1, far 100,
   fixed at the origin looking down -Z.
 - **Fog**: `Fog(0xefece3, near, far)`, paper-coloured. With the multiply blend a fogged figure
@@ -71,10 +73,29 @@ ry     = def.ry + delta * 0.06         a slow turn as it passes
 So a figure sits at rest (y = -0.3) when the page is scrolled to `anchor * scrollRange`, and
 moves against the scroll at `speed` times the page rate, in screen-true units at its own depth.
 
+## Scroll-linked motion: why the compositor
+
+The browser's compositor scrolls the page before any JavaScript scroll handler runs. Anything
+moved from a scroll listener therefore lands one frame after the sheet has already moved, and
+if a frame is late the mismatch shows as jitter. Three things on this page move with the scroll
+besides the figures: the sections marked `data-plx`, and the three texture strata. Both are
+declared as CSS scroll-driven animations on the `translate` property (`src/statues/scrollfx.ts`
+generates the keyframes with concrete values), so the compositor moves them in the same frame
+as the scroll with no layout reads and no repaints. The figures, which need a WebGL render,
+stay on the main thread but follow a damped scroll position (below).
+
+Two CSS details make the timelines resolve against the document rather than an ancestor:
+`html { overflow-x: hidden }` clips at the viewport instead of on `.page`, and the sheet uses
+`overflow: clip` instead of the design system's `overflow: hidden` (identical clipping, but
+`hidden` creates a scroll container and `view()` would measure against it).
+
 ## Strata
 
-Three repeating SVG tiles, generated inline in `StatueField.tsx`, drift by setting
-`background-position`:
+Three repeating SVG tiles, generated inline in `StatueField.tsx`. Each layer is
+`100vh + rate x scroll range` tall (the range is written to `--scroll-range` on `:root` by
+`watchScrollRange`, and refreshed by a `ResizeObserver` on `body`) and translates upward with a
+`scroll(root)` timeline; the keyframes `strata-dots`, `strata-hatch`, `strata-flecks` are
+rewritten whenever the page height changes:
 
 | Layer | Content | Tile | Opacity | Rate |
 | --- | --- | --- | --- | --- |
@@ -88,27 +109,43 @@ the sheet.
 
 ## Foreground parallax (`data-plx`)
 
-Any element with `data-plx="rate"` is translated each draw by
-`(elementCentre - viewportCentre) * -rate` pixels, measured from its resting position (the
-previous offset is subtracted before measuring so the value does not feed back). Positive
-rates lag the scroll, negative rates lead it. Rates in use range from -0.1 to 0.12.
+Any element with `data-plx="rate"` drifts by `(elementCentre - viewportCentre) * -rate` pixels.
+Positive rates lag the scroll, negative rates lead it. Rates in use range from -0.1 to 0.12.
 
-## Redraw policy
+`installParallax` (called from `App` in a layout effect, before first paint) gives each such
+element a `view()` timeline animation over its `cover` range. Across that range the element's
+centre travels from `vh + h/2` to `-h/2`, so the drift runs linearly from
+`-rate x (50vh + 50%)` to `+rate x (50vh + 50%)`; one `@keyframes plx-<rate>` rule is generated
+per distinct rate. Because it animates `translate`, it composes with the design's `rotate()`
+transforms (the studio plate and colophon keep their tilt).
 
-There is no animation loop. `queue()` coalesces scroll events into one `requestAnimationFrame`
-draw; `resize` draws immediately. Model load completion also queues a draw. This keeps the GPU
-idle while the reader is still.
+## Redraw policy and damping
+
+There is no free-running animation loop. A scroll event records the target offset and starts a
+short `requestAnimationFrame` chain in which the displayed offset eases toward the target with
+a time constant of 80 ms (`shown += (target - shown) * (1 - e^(-dt/80))`), stopping once within
+a quarter pixel. A late or dropped frame therefore shows as a slightly larger step rather than a
+jump, and the figures settle about 150 ms after the reader stops. `resize` snaps to the target
+and draws immediately; model load completion draws once.
+
+## Fallback without scroll-driven animations
+
+If `CSS.supports('animation-timeline: view()')` (or `scroll()`) is false, `field.ts` moves the
+strata and the `data-plx` sections itself on each scroll frame, still with `translate` (no
+repaint), with all layout reads batched before the writes.
 
 ## Reduced motion and fallbacks
 
-- `prefers-reduced-motion: reduce`: figures hold at `delta = 0` (their rest pose), strata do
-  not shift, `data-plx` transforms are cleared. Everything still renders.
+- `prefers-reduced-motion: reduce`: figures hold at `delta = 0` (their rest pose); the
+  scroll-driven animations are inside a `no-preference` media block so strata and sections
+  hold still too. Everything still renders.
 - No WebGL: `WebGLRenderer` throws; the wrapper logs a warning and renders nothing behind the
   sheet.
 - Phone widths (max 720 px): canvas opacity drops to .8 so type stays legible over a figure.
 
 ## Disposal
 
-The disposer cancels any queued frame, removes the scroll and resize listeners, clears
-`data-plx` transforms, and disposes the PMREM generator and renderer. React runs it on
+The disposer cancels any queued frame, removes the scroll and resize listeners, clears any
+fallback `translate` values, and disposes the PMREM generator and renderer; the wrapper also
+stops the scroll-range observer. React runs it on
 unmount and whenever `shadowDepth` changes (the scene is rebuilt).
